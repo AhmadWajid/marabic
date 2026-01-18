@@ -12,12 +12,12 @@
 
 ```javascript
 const firebaseConfig = {
-  apiKey: "AIzaSyC...",
+  apiKey: "your-api-key-here",
   authDomain: "your-project.firebaseapp.com",
   projectId: "your-project-id",
   storageBucket: "your-project.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abc123"
+  messagingSenderId: "your-sender-id",
+  appId: "your-app-id"
 };
 ```
 
@@ -34,12 +34,12 @@ const firebaseConfig = {
 ## Example `.env.local` File
 
 ```env
-NEXT_PUBLIC_FIREBASE_API_KEY=AIzaSyC1234567890abcdefghijklmnopqrstuvwxyz
-NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=my-arabie-app.firebaseapp.com
-NEXT_PUBLIC_FIREBASE_PROJECT_ID=my-arabie-app
-NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=my-arabie-app.appspot.com
-NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=123456789012
-NEXT_PUBLIC_FIREBASE_APP_ID=1:123456789012:web:abcdef1234567890
+NEXT_PUBLIC_FIREBASE_API_KEY=your_api_key_here
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project.appspot.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+NEXT_PUBLIC_FIREBASE_APP_ID=your_app_id
 ```
 
 ## Important Notes
