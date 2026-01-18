@@ -32,14 +32,6 @@ function initFirebase() {
     
     if (!hasValidConfig) {
       console.error('Firebase config validation failed. Missing or empty required fields.');
-      console.error('Config:', {
-        apiKey: config.apiKey && config.apiKey.trim() ? `SET (${config.apiKey.length} chars)` : 'MISSING or EMPTY',
-        authDomain: config.authDomain && config.authDomain.trim() ? `SET (${config.authDomain})` : 'MISSING or EMPTY',
-        projectId: config.projectId && config.projectId.trim() ? `SET (${config.projectId})` : 'MISSING or EMPTY',
-        storageBucket: config.storageBucket && config.storageBucket.trim() ? `SET (${config.storageBucket})` : 'MISSING or EMPTY',
-        messagingSenderId: config.messagingSenderId && config.messagingSenderId.trim() ? `SET (${config.messagingSenderId})` : 'MISSING or EMPTY',
-        appId: config.appId && config.appId.trim() ? `SET (${config.appId.length} chars)` : 'MISSING or EMPTY',
-      });
       return false;
     }
 
@@ -54,10 +46,6 @@ function initFirebase() {
       if (!appOptions.apiKey || !appOptions.apiKey.trim() || 
           !appOptions.projectId || !appOptions.projectId.trim()) {
         console.error('Existing Firebase app has invalid configuration. Reinitializing...');
-        console.error('App options:', {
-          apiKey: appOptions.apiKey ? `${appOptions.apiKey.substring(0, 10)}...` : 'MISSING',
-          projectId: appOptions.projectId || 'MISSING',
-        });
         
         // The existing app is invalid, we need to delete it and create a new one
         // Note: We can't delete apps in Firebase v9+, so we'll try to use the default app
@@ -74,12 +62,6 @@ function initFirebase() {
       auth = getAuth(app);
     } else {
       // Initialize new app with validated config
-      console.log('Initializing Firebase with config:', {
-        apiKey: config.apiKey.substring(0, 10) + '...',
-        authDomain: config.authDomain,
-        projectId: config.projectId,
-      });
-      
       app = initializeApp(config);
       db = getFirestore(app);
       auth = getAuth(app);
@@ -96,14 +78,10 @@ function initFirebase() {
     const authAppOptions = authApp.options;
     if (!authAppOptions.apiKey || !authAppOptions.apiKey.trim() || 
         !authAppOptions.projectId || !authAppOptions.projectId.trim()) {
-      console.error('Firebase Auth app has invalid configuration:', {
-        apiKey: authAppOptions.apiKey ? 'SET' : 'MISSING',
-        projectId: authAppOptions.projectId ? 'SET' : 'MISSING',
-      });
+      console.error('Firebase Auth app has invalid configuration.');
       return false;
     }
     
-    console.log('✅ Firebase initialized successfully');
     return true;
   } catch (error: any) {
     console.error('Failed to initialize Firebase:', error);
@@ -118,12 +96,7 @@ function initFirebase() {
         error?.code === 400 || 
         error?.message?.includes('configuration') ||
         error?.message?.includes('CONFIGURATION_NOT_FOUND')) {
-      console.error('Firebase configuration error. Please ensure:');
-      console.error('1. .env.local file exists in project root');
-      console.error('2. All NEXT_PUBLIC_FIREBASE_* variables are set (not empty)');
-      console.error('3. Dev server has been restarted after creating/updating .env.local');
-      console.error('4. No typos in variable names (must start with NEXT_PUBLIC_)');
-      console.error('5. No extra spaces or quotes in .env.local values');
+      console.error('Firebase configuration error. Please check your environment variables.');
     }
     return false;
   }
