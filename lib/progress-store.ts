@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { getProgress as getProgressUtil, getAllProgress, Progress } from './progress';
+import { getYouTubeProgress as getYouTubeProgressUtil, YouTubeProgress } from './youtube-progress';
 
 // Custom hook to track progress changes and force re-renders
 export function useProgress() {
@@ -14,7 +15,7 @@ export function useProgress() {
   useEffect(() => {
     // Listen for storage changes (from other tabs/windows)
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key && e.key.startsWith('book')) {
+      if (e.key && (e.key.startsWith('book') || e.key.startsWith('youtube-book'))) {
         refresh();
       }
     };
@@ -73,4 +74,47 @@ export function saveLastWatchedVideo(
 ): void {
   if (typeof window === 'undefined') return;
   localStorage.setItem('lastWatchedVideo', JSON.stringify({ book, dvd, partType, partIndex }));
+}
+
+// Get last watched YouTube video from localStorage
+export function getLastWatchedYouTubeVideo(): {
+  book: number;
+  videoIndex: number;
+} | null {
+  if (typeof window === 'undefined') return null;
+
+  const lastWatched = localStorage.getItem('lastWatchedYouTubeVideo');
+  if (!lastWatched) return null;
+
+  try {
+    return JSON.parse(lastWatched);
+  } catch {
+    return null;
+  }
+}
+
+// Save last watched YouTube video
+export function saveLastWatchedYouTubeVideo(
+  book: number,
+  videoIndex: number
+): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem('lastWatchedYouTubeVideo', JSON.stringify({ book, videoIndex }));
+}
+
+// Hook to get YouTube progress with reactivity
+export function useYouTubeProgress(
+  bookNumber: number,
+  videoIndex: number,
+  progressVersion: number
+): YouTubeProgress {
+  const [progress, setProgress] = useState<YouTubeProgress>(() => 
+    getYouTubeProgressUtil(bookNumber, videoIndex)
+  );
+
+  useEffect(() => {
+    setProgress(getYouTubeProgressUtil(bookNumber, videoIndex));
+  }, [bookNumber, videoIndex, progressVersion]);
+
+  return progress;
 }

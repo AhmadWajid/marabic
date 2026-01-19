@@ -39,6 +39,7 @@ export default function VideoPlayer({
     const savedProgress = getProgress(bookNumber, dvdNumber, partType, partIndex);
     saveLastWatchedVideo(bookNumber, dvdNumber, partType, partIndex);
     setHasSeeked(false);
+    lastSaveTimeRef.current = 0; // Reset save time tracking
   }, [src, bookNumber, dvdNumber, partType, partIndex]);
 
   // Set up video event listeners
@@ -51,8 +52,15 @@ export default function VideoPlayer({
       // Seek to saved position after metadata loads
       if (!hasSeeked) {
         const savedProgress = getProgress(bookNumber, dvdNumber, partType, partIndex);
-        if (savedProgress.lastPosition && savedProgress.lastPosition > 5) {
+        if (savedProgress.lastPosition && savedProgress.lastPosition > 5 && savedProgress.lastPosition < video.duration - 10) {
+          // Only seek if position is valid and not near the end
           video.currentTime = savedProgress.lastPosition;
+          setHasSeeked(true);
+        } else if (savedProgress.watched) {
+          // If video is marked as watched, start from beginning
+          video.currentTime = 0;
+          setHasSeeked(true);
+        } else {
           setHasSeeked(true);
         }
       }

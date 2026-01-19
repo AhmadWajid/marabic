@@ -3,15 +3,20 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { Book, VideoPart } from '@/lib/data';
+import { YouTubeBook } from '@/lib/youtube-data';
 import { getProgress } from '@/lib/progress';
+import { getYouTubeProgress } from '@/lib/youtube-progress';
+
+type SeriesType = 'original' | 'youtube';
 
 interface CourseNavigationProps {
-  books: Book[];
+  books: Book[] | YouTubeBook[];
   selectedBook: number;
   selectedDVD: number;
   selectedPartType: string;
   selectedPartIndex: number;
   progressVersion?: number;
+  seriesType?: SeriesType;
   onSelect: (book: number, dvd: number, partType: string, partIndex: number) => void;
 }
 
@@ -22,6 +27,7 @@ export default function CourseNavigation({
   selectedPartType,
   selectedPartIndex,
   progressVersion = 0,
+  seriesType = 'original',
   onSelect,
 }: CourseNavigationProps) {
   const [expandedBook, setExpandedBook] = useState<number>(selectedBook);
@@ -48,27 +54,38 @@ export default function CourseNavigation({
     return 0; // Not started
   };
 
-  const getBookProgress = (book: Book) => {
+  const getBookProgress = (book: Book | YouTubeBook) => {
     let totalProgress = 0;
     let totalVideos = 0;
     
-    book.dvds.forEach((dvd) => {
-      Object.entries(dvd.parts).forEach(([partType, parts]) => {
-        parts.forEach((_, index) => {
-          totalVideos++;
-          const progress = getProgress(book.number, dvd.number, partType, index);
-          if (progress.watched) {
-            totalProgress += 100; // Fully watched
-          } else if (progress.lastPosition && progress.duration && progress.duration > 0) {
-            // Partially watched - add percentage
-            totalProgress += Math.min(100, (progress.lastPosition / progress.duration) * 100);
-          }
+    if (seriesType === 'youtube' && 'videos' in book) {
+      book.videos.forEach((_, index) => {
+        totalVideos++;
+        const progress = getYouTubeProgress(book.number, index);
+        if (progress.watched) {
+          totalProgress += 100;
+        } else if (progress.lastPosition && progress.duration && progress.duration > 0) {
+          totalProgress += Math.min(100, (progress.lastPosition / progress.duration) * 100);
+        }
+      });
+    } else if ('dvds' in book) {
+      book.dvds.forEach((dvd) => {
+        Object.entries(dvd.parts).forEach(([partType, parts]) => {
+          parts.forEach((_, index) => {
+            totalVideos++;
+            const progress = getProgress(book.number, dvd.number, partType, index);
+            if (progress.watched) {
+              totalProgress += 100;
+            } else if (progress.lastPosition && progress.duration && progress.duration > 0) {
+              totalProgress += Math.min(100, (progress.lastPosition / progress.duration) * 100);
+            }
+          });
         });
       });
-    });
+    }
     
     const percent = totalVideos > 0 ? (totalProgress / totalVideos) : 0;
-    const watched = Math.floor(totalProgress / 100); // Count fully watched
+    const watched = Math.floor(totalProgress / 100);
     return { total: totalVideos, watched, percent };
   };
 
@@ -165,109 +182,233 @@ export default function CourseNavigation({
 
               {isBookExpanded && (
                 <div className="ml-4 mt-1 space-y-1 border-l border-gray-200 pl-3">
-                  {book.dvds.map((dvd) => {
-                    const isDVDExpanded = expandedDVD === dvd.number;
-                    const isDVDSelected = isBookSelected && selectedDVD === dvd.number;
-                    const dvdProgress = getDVDProgress(book, dvd.number);
+                  {seriesType === 'youtube' && 'videos' in book ? (
+                    // YouTube series - show videos directly
+                    <div className="space-y-0.5">
+                      {book.videos.map((video, index) => {
+                        const watched = getYouTubeProgress(book.number, index).watched;
+                        const progress = getYouTubeProgress(book.number, index);
+                        const progressPercent = progress.watched
+                          ? 100
+                          : progress.lastPosition && progress.duration && progress.duration > 0
+                          ? Math.min(100, (progress.lastPosition / progress.duration) * 100)
+                          : 0;
+                        const isSelected = isBookSelected && selectedPartIndex === index;
+                        
+                        // Normalize title to consistent format: "Lesson X" or "Lesson X - Topic"
+                        let displayTitle = video.title
+                          .replace(/^Madinah Book \d+\s*\|\s*/i, '')
+                          .replace(/\s*\|\s*Abu Kenzah.*$/i, '')
+                          .trim();
+                        
+                        // Extract lesson number - try multiple patterns
+                        let lessonNum: string | null = null;
+                        let topic: string | null = null;
+                        let partInfo: string | null = null;
+                        
+                        // Pattern 1: "Session X - L Y" or "Session X - L Y - Topic"
+                        const sessionPattern = displayTitle.match(/(?:Session|session)\s*(\d+)\s*[-–]\s*L(\d+)(?:\s*[-–]\s*(.+?))?(?:\s*[-–]|$)/i);
+                        if (sessionPattern) {
+                          lessonNum = sessionPattern[2]; // Use the L number as lesson
+                          topic = sessionPattern[3]?.trim() || null;
+                        }
+                        
+                        // Pattern 2: "L X" or "L X - Topic" or "L X Part Y - Topic"
+                        if (!lessonNum) {
+                          const lPattern = displayTitle.match(/L(\d+)(?:\s*(?:Part|part)\s*(\d+))?(?:\s*[-–]\s*(.+?))?(?:\s*[-–]|$)/i);
+                          if (lPattern) {
+                            lessonNum = lPattern[1];
+                            partInfo = lPattern[2] || null;
+                            topic = lPattern[3]?.trim() || null;
+                          }
+                        }
+                        
+                        // Pattern 3: "Lesson X" or "Lesson X Part Y" or "lesson X Part Y"
+                        if (!lessonNum) {
+                          const lessonPattern = displayTitle.match(/(?:Lesson|lesson)\s*(\d+)(?:\s*(?:Part|part)\s*(\d+))?(?:\s*[-–]\s*(.+?))?(?:\s*[-–]|$)/i);
+                          if (lessonPattern) {
+                            lessonNum = lessonPattern[1];
+                            partInfo = lessonPattern[2] || null;
+                            topic = lessonPattern[3]?.trim() || null;
+                          }
+                        }
+                        
+                        // Build consistent display title
+                        if (lessonNum) {
+                          let formattedTitle = `Lesson ${lessonNum}`;
+                          if (partInfo) {
+                            formattedTitle += ` Part ${partInfo}`;
+                          }
+                          if (topic) {
+                            formattedTitle += ` - ${topic}`;
+                          }
+                          displayTitle = formattedTitle;
+                        } else {
+                          // Fallback: use video number
+                          displayTitle = `Lesson ${index + 1}`;
+                        }
 
-                    return (
-                      <div key={dvd.number}>
-                        <button
-                          onClick={() => setExpandedDVD(isDVDExpanded ? 0 : dvd.number)}
-                          className={`w-full px-2 py-1.5 text-left flex items-center justify-between rounded-md text-sm transition-colors ${
-                            isDVDSelected
-                              ? 'bg-blue-50 text-blue-900'
-                              : 'text-gray-600 hover:bg-gray-50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-2 min-w-0 flex-1">
-                            <span className="font-medium">DVD {String(dvd.number).padStart(2, '0')}</span>
-                            <span className="text-xs text-gray-500">
-                              {dvdProgress.watched}/{dvdProgress.total}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <div className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden">
-                              <div
-                                className={`h-full transition-all ${
-                                  dvdProgress.percent === 100 ? 'bg-green-500' : 'bg-blue-500'
-                                }`}
-                                style={{ width: `${dvdProgress.percent}%` }}
-                              />
+                        return (
+                          <button
+                            key={index}
+                            onClick={() => onSelect(book.number, 0, '', index)}
+                            className={`w-full px-2 py-1.5 text-left rounded-md transition-colors ${
+                              isSelected
+                                ? 'bg-blue-600 text-white'
+                                : watched
+                                ? 'bg-green-50 text-green-800 hover:bg-green-100'
+                                : 'text-gray-700 hover:bg-gray-50'
+                            }`}
+                            title={video.title}
+                          >
+                            <div className="flex items-center gap-2 min-w-0">
+                              {watched && (
+                                <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                  <path
+                                    fillRule="evenodd"
+                                    d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                    clipRule="evenodd"
+                                  />
+                                </svg>
+                              )}
+                              <span className={`text-xs font-medium shrink-0 w-6 ${
+                                isSelected ? 'text-blue-100' : 'text-gray-500'
+                              }`}>
+                                {index + 1}
+                              </span>
+                              <span className={`text-sm truncate flex-1 min-w-0 ${
+                                isSelected ? 'text-white' : 'text-gray-900'
+                              }`}>
+                                {displayTitle}
+                              </span>
+                              {video.durationTimestamp && (
+                                <span className={`text-xs shrink-0 ${
+                                  isSelected ? 'text-blue-100' : 'text-gray-400'
+                                }`}>
+                                  {video.durationTimestamp}
+                                </span>
+                              )}
+                              {progressPercent > 0 && (
+                                <div className="w-10 h-1 bg-gray-200 rounded-full overflow-hidden shrink-0">
+                                  <div
+                                    className={`h-full transition-all ${
+                                      progressPercent === 100 ? 'bg-green-500' : 'bg-green-400'
+                                    }`}
+                                    style={{ width: `${progressPercent}%` }}
+                                  />
+                                </div>
+                              )}
                             </div>
-                            <svg
-                              className={`w-3 h-3 text-gray-400 transition-transform shrink-0 ${
-                                isDVDExpanded ? 'rotate-90' : ''
-                              }`}
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
-                            >
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                            </svg>
-                          </div>
-                        </button>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : 'dvds' in book ? (
+                    // Original series - show DVDs
+                    book.dvds.map((dvd) => {
+                      const isDVDExpanded = expandedDVD === dvd.number;
+                      const isDVDSelected = isBookSelected && selectedDVD === dvd.number;
+                      const dvdProgress = getDVDProgress(book, dvd.number);
 
-                        {isDVDExpanded && (
-                          <div className="ml-4 mt-1 space-y-2 border-l border-gray-200 pl-3">
-                            {Object.entries(dvd.parts).map(([partType, parts]) => (
-                              <div key={partType}>
-                                <div className="text-xs font-medium text-gray-500 uppercase mb-1">
-                                  Part {partType}
-                                </div>
-                                <div className="space-y-0.5">
-                                  {parts.map((part, index) => {
-                                    const watched = isWatched(book.number, dvd.number, partType, index);
-                                    const progressPercent = getVideoProgress(book.number, dvd.number, partType, index);
-                                    const isSelected =
-                                      isBookSelected &&
-                                      isDVDSelected &&
-                                      selectedPartType === partType &&
-                                      selectedPartIndex === index;
-
-                                    return (
-                                      <button
-                                        key={index}
-                                        onClick={() => onSelect(book.number, dvd.number, partType, index)}
-                                        className={`w-full px-2 py-1.5 text-left text-sm rounded-md transition-colors flex items-center gap-2 ${
-                                          isSelected
-                                            ? 'bg-blue-600 text-white'
-                                            : watched
-                                            ? 'bg-green-50 text-green-800 hover:bg-green-100'
-                                            : 'text-gray-700 hover:bg-gray-50'
-                                        }`}
-                                      >
-                                        {watched && (
-                                          <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
-                                            <path
-                                              fillRule="evenodd"
-                                              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-                                              clipRule="evenodd"
-                                            />
-                                          </svg>
-                                        )}
-                                        <span className="truncate flex-1">{part.name}</span>
-                                        {progressPercent > 0 && (
-                                          <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden shrink-0">
-                                            <div
-                                              className={`h-full transition-all ${
-                                                progressPercent === 100 ? 'bg-green-500' : 'bg-green-400'
-                                              }`}
-                                              style={{ width: `${progressPercent}%` }}
-                                            />
-                                          </div>
-                                        )}
-                                      </button>
-                                    );
-                                  })}
-                                </div>
+                      return (
+                        <div key={dvd.number}>
+                          <button
+                            onClick={() => setExpandedDVD(isDVDExpanded ? 0 : dvd.number)}
+                            className={`w-full px-2 py-1.5 text-left flex items-center justify-between rounded-md text-sm transition-colors ${
+                              isDVDSelected
+                                ? 'bg-blue-50 text-blue-900'
+                                : 'text-gray-600 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="font-medium">DVD {String(dvd.number).padStart(2, '0')}</span>
+                              <span className="text-xs text-gray-500">
+                                {dvdProgress.watched}/{dvdProgress.total}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="w-12 h-1 bg-gray-200 rounded-full overflow-hidden">
+                                <div
+                                  className={`h-full transition-all ${
+                                    dvdProgress.percent === 100 ? 'bg-green-500' : 'bg-blue-500'
+                                  }`}
+                                  style={{ width: `${dvdProgress.percent}%` }}
+                                />
                               </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
+                              <svg
+                                className={`w-3 h-3 text-gray-400 transition-transform shrink-0 ${
+                                  isDVDExpanded ? 'rotate-90' : ''
+                                }`}
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                              </svg>
+                            </div>
+                          </button>
+
+                          {isDVDExpanded && (
+                            <div className="ml-4 mt-1 space-y-2 border-l border-gray-200 pl-3">
+                              {Object.entries(dvd.parts).map(([partType, parts]) => (
+                                <div key={partType}>
+                                  <div className="text-xs font-medium text-gray-500 uppercase mb-1">
+                                    Part {partType}
+                                  </div>
+                                  <div className="space-y-0.5">
+                                    {parts.map((part, index) => {
+                                      const watched = isWatched(book.number, dvd.number, partType, index);
+                                      const progressPercent = getVideoProgress(book.number, dvd.number, partType, index);
+                                      const isSelected =
+                                        isBookSelected &&
+                                        isDVDSelected &&
+                                        selectedPartType === partType &&
+                                        selectedPartIndex === index;
+
+                                      return (
+                                        <button
+                                          key={index}
+                                          onClick={() => onSelect(book.number, dvd.number, partType, index)}
+                                          className={`w-full px-2 py-1.5 text-left text-sm rounded-md transition-colors flex items-center gap-2 ${
+                                            isSelected
+                                              ? 'bg-blue-600 text-white'
+                                              : watched
+                                              ? 'bg-green-50 text-green-800 hover:bg-green-100'
+                                              : 'text-gray-700 hover:bg-gray-50'
+                                          }`}
+                                        >
+                                          {watched && (
+                                            <svg className="w-3.5 h-3.5 shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                                              <path
+                                                fillRule="evenodd"
+                                                d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                                                clipRule="evenodd"
+                                              />
+                                            </svg>
+                                          )}
+                                          <span className="truncate flex-1">{part.name}</span>
+                                          {progressPercent > 0 && (
+                                            <div className="w-16 h-1.5 bg-gray-200 rounded-full overflow-hidden shrink-0">
+                                              <div
+                                                className={`h-full transition-all ${
+                                                  progressPercent === 100 ? 'bg-green-500' : 'bg-green-400'
+                                                }`}
+                                                style={{ width: `${progressPercent}%` }}
+                                              />
+                                            </div>
+                                          )}
+                                        </button>
+                                      );
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })
+                  ) : null}
                 </div>
               )}
             </div>
