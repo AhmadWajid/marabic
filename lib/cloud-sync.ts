@@ -390,24 +390,46 @@ export async function loadProgressFromCloud(): Promise<boolean> {
     if (docSnap.exists()) {
       const data = docSnap.data();
       if (data.progress) {
-        // Merge cloud progress with local (cloud takes precedence)
-        Object.entries(data.progress as Record<string, Progress>).forEach(([key, value]) => {
-          const localProgress = localStorage.getItem(key);
-          if (!localProgress) {
-            // Only add if not exists locally
-            localStorage.setItem(key, JSON.stringify(value));
+        // Merge cloud progress with local intelligently based on timestamps
+        Object.entries(data.progress as Record<string, Progress>).forEach(([key, cloudValue]) => {
+          const localProgressStr = localStorage.getItem(key);
+          
+          if (!localProgressStr) {
+            // No local progress, use cloud data
+            // Ensure timestamp is set if missing (for old data)
+            const cloudWithTimestamp = {
+              ...cloudValue,
+              lastUpdated: cloudValue.lastUpdated || Date.now(),
+            };
+            localStorage.setItem(key, JSON.stringify(cloudWithTimestamp));
           } else {
-            // Merge: keep watched status from either, use latest position
+            // Both exist, merge intelligently based on timestamps
             try {
-              const local = JSON.parse(localProgress) as Progress;
+              const local = JSON.parse(localProgressStr) as Progress;
+              const localTime = local.lastUpdated || 0;
+              const cloudTime = cloudValue.lastUpdated || 0;
+              
+              // Use the newer data as the base, then merge the best parts
+              const isLocalNewer = localTime > cloudTime;
+              const base = isLocalNewer ? local : cloudValue;
+              const other = isLocalNewer ? cloudValue : local;
+              
+              // Merge: prefer newer data, but combine best attributes
               const merged: Progress = {
-                watched: local.watched || value.watched,
-                lastPosition: Math.max(local.lastPosition || 0, value.lastPosition || 0),
-                duration: value.duration || local.duration,
+                watched: base.watched || other.watched, // If either is watched, keep it
+                lastPosition: Math.max(base.lastPosition || 0, other.lastPosition || 0), // Use max position
+                duration: base.duration || other.duration, // Prefer base duration
+                lastUpdated: Math.max(localTime, cloudTime), // Keep the latest timestamp
               };
+              
               localStorage.setItem(key, JSON.stringify(merged));
             } catch {
-              localStorage.setItem(key, JSON.stringify(value));
+              // If parsing fails, use cloud data but ensure timestamp
+              const cloudWithTimestamp = {
+                ...cloudValue,
+                lastUpdated: cloudValue.lastUpdated || Date.now(),
+              };
+              localStorage.setItem(key, JSON.stringify(cloudWithTimestamp));
             }
           }
         });
@@ -454,8 +476,44 @@ export function subscribeToProgressUpdates(callback: () => void): (() => void) |
       if (docSnap.exists()) {
         const data = docSnap.data();
         if (data.progress) {
-          Object.entries(data.progress as Record<string, Progress>).forEach(([key, value]) => {
-            localStorage.setItem(key, JSON.stringify(value));
+          // Merge instead of overwrite to prevent losing local progress
+          Object.entries(data.progress as Record<string, Progress>).forEach(([key, cloudValue]) => {
+            const localProgressStr = localStorage.getItem(key);
+            
+            if (!localProgressStr) {
+              // No local progress, use cloud data
+              const cloudWithTimestamp = {
+                ...cloudValue,
+                lastUpdated: cloudValue.lastUpdated || Date.now(),
+              };
+              localStorage.setItem(key, JSON.stringify(cloudWithTimestamp));
+            } else {
+              // Both exist, merge intelligently
+              try {
+                const local = JSON.parse(localProgressStr) as Progress;
+                const localTime = local.lastUpdated || 0;
+                const cloudTime = cloudValue.lastUpdated || 0;
+                
+                // Only update if cloud data is newer, otherwise keep local
+                if (cloudTime > localTime) {
+                  const merged: Progress = {
+                    watched: local.watched || cloudValue.watched,
+                    lastPosition: Math.max(local.lastPosition || 0, cloudValue.lastPosition || 0),
+                    duration: cloudValue.duration || local.duration,
+                    lastUpdated: cloudTime,
+                  };
+                  localStorage.setItem(key, JSON.stringify(merged));
+                }
+                // If local is newer, don't overwrite it
+              } catch {
+                // If parsing fails, use cloud data but ensure timestamp
+                const cloudWithTimestamp = {
+                  ...cloudValue,
+                  lastUpdated: cloudValue.lastUpdated || Date.now(),
+                };
+                localStorage.setItem(key, JSON.stringify(cloudWithTimestamp));
+              }
+            }
           });
           callback();
         }

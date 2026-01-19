@@ -21,14 +21,17 @@ export default function SyncStatus() {
     if (!user) return;
 
     // Load progress on mount and when user changes
-    loadProgressFromCloud().then((success) => {
+    // First sync local to cloud, then load (to ensure cloud has latest before merging)
+    (async () => {
+      await syncProgressToCloud();
+      const success = await loadProgressFromCloud();
       if (success) {
         refresh();
         setLastSynced(new Date().toLocaleString());
         setSyncStatus('success');
         setTimeout(() => setSyncStatus('idle'), 2000);
       }
-    });
+    })();
 
     // Subscribe to real-time updates
     const unsubscribe = subscribeToProgressUpdates(() => {

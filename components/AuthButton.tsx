@@ -12,13 +12,12 @@ export default function AuthButton() {
   const { refresh } = useProgress();
 
   useEffect(() => {
-    const unsubscribe = onAuthChange((currentUser) => {
+    const unsubscribe = onAuthChange(async (currentUser) => {
       setUser(currentUser);
       if (currentUser) {
-        // Load progress when user signs in
-        loadProgressFromCloud().then(() => {
-          refresh();
-        });
+        // Progress loading is handled in app/page.tsx to avoid duplicate calls
+        // Just refresh the UI
+        refresh();
       }
     });
 

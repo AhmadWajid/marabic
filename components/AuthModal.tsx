@@ -29,11 +29,11 @@ export default function AuthModal({ isOpen, onClose }: AuthModalProps) {
         : await signIn(email, password);
 
       if (result.success) {
-        // Load progress from cloud
+        // First sync local progress to cloud (to ensure cloud has latest data)
+        await syncProgressToCloud();
+        // Then load from cloud (which will merge intelligently)
         await loadProgressFromCloud();
         refresh();
-        // Sync current progress to cloud
-        await syncProgressToCloud();
         onClose();
         setEmail('');
         setPassword('');

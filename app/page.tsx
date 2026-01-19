@@ -54,6 +54,9 @@ export default function Home() {
   useEffect(() => {
     const unsubscribe = onAuthChange(async (user) => {
       if (user) {
+        // First sync local progress to cloud (to ensure cloud has latest data)
+        // Then load from cloud (which will merge intelligently)
+        await syncProgressToCloud();
         await loadProgressFromCloud();
         refresh();
       }

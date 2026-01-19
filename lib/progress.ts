@@ -4,6 +4,7 @@ export interface Progress {
   watched: boolean;
   lastPosition?: number;
   duration?: number;
+  lastUpdated?: number; // Timestamp in milliseconds
 }
 
 export function getProgress(bookNumber: number, dvdNumber: number, partType: string, partIndex: number): Progress {
@@ -37,7 +38,12 @@ export function saveProgress(
   }
   
   const key = getVideoKey(bookNumber, dvdNumber, partType, partIndex);
-  localStorage.setItem(key, JSON.stringify(progress));
+  // Always add/update timestamp when saving
+  const progressWithTimestamp = {
+    ...progress,
+    lastUpdated: Date.now(),
+  };
+  localStorage.setItem(key, JSON.stringify(progressWithTimestamp));
 }
 
 export function markAsWatched(
@@ -46,7 +52,12 @@ export function markAsWatched(
   partType: string,
   partIndex: number
 ): void {
-  saveProgress(bookNumber, dvdNumber, partType, partIndex, { watched: true });
+  // Preserve existing progress when marking as watched
+  const existing = getProgress(bookNumber, dvdNumber, partType, partIndex);
+  saveProgress(bookNumber, dvdNumber, partType, partIndex, {
+    ...existing,
+    watched: true,
+  });
 }
 
 export function getAllProgress(): Record<string, Progress> {
